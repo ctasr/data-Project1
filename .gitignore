@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 课程数据不上传仓库
+train_data.csv
+test_data_unlabeled.csv
+prediction.csv
+predictions.csv
+
+# 运行时生成的大文件与临时文件
+models/
+tmp/
+*.joblib
+*.pkl
+*.log

@@ -1,0 +1,27 @@
+{
+  "seed": 42,
+  "quick_mode": false,
+  "labelled_rows": 7368,
+  "training_rows": 5894,
+  "validation_rows": 1474,
+  "official_test_rows": 2457,
+  "best_algorithm": "LinearSVM",
+  "best_representation": "hybrid",
+  "best_parameters": {
+    "C": 0.5
+  },
+  "best_macro_f1": 0.9500230471865999,
+  "best_accuracy": 0.9497964721845319,
+  "prediction_class_counts": {
+    "0": 258,
+    "1": 244,
+    "2": 242,
+    "3": 240,
+    "4": 251,
+    "5": 250,
+    "6": 246,
+    "7": 245,
+    "8": 246,
+    "9": 235
+  }
+}
