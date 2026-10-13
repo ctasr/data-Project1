@@ -13,8 +13,19 @@
 ├─ check_mlp_depth.py     MLP层数对比（补充实验，不参与选模）
 ├─ requirements.txt       Python依赖
 ├─ prediction.csv         最终预测：无表头单列，每行一个0—9类别标签
-├─ results/               实验配置、指标与运行记录
-└─ figures/               报告图表
+├─ results/               实验配置、指标与运行记录（下列为主要结果）
+│  ├─ formal_tuning_results.csv  62组模型配置及验证指标
+│  ├─ fine_tuning.csv            25组融合参数及验证指标
+│  ├─ formal_mlp_history.csv     MLP逐轮训练与验证损失
+│  ├─ matched_budget_ablation.csv 特征表示消融结果
+│  ├─ classification_report.csv  各类别分类指标
+│  ├─ stability_summary.csv      多随机种子的均值与波动
+│  └─ run_summary.json           数据哈希、划分与最终选模摘要
+└─ figures/
+   ├─ loss_curve.png         MLP训练与验证损失曲线
+   ├─ model_comparison.png   模型性能对比
+   ├─ ablation_comparison.png 特征表示消融对比
+   └─ confusion_matrix.png   验证集混淆矩阵
 ```
 
 ## 运行方法
