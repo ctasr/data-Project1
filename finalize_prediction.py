@@ -43,6 +43,9 @@ def load_candidates() -> pd.DataFrame:
     main = pd.read_csv(PATHS.results / "experiment_results.csv")
     formal = pd.read_csv(PATHS.results / "formal_tuning_results.csv")
     fine = pd.read_csv(PATHS.results / "fine_tuning.csv")
+    fine_summary = json.loads(
+        (PATHS.results / "fine_tuning_summary.json").read_text(encoding="utf-8")
+    )
     development = json.loads(
         (PATHS.results / "development_summary.json").read_text(encoding="utf-8")
     )
@@ -55,6 +58,15 @@ def load_candidates() -> pd.DataFrame:
             or formal_summary["train_sha256"] != sha256(PATHS.train_csv)
             or formal_summary["total_configurations"] != 62):
         raise RuntimeError("Formal results do not belong to this complete seed-42 run")
+    if (fine_summary.get("seed") != 42
+            or fine_summary.get("train_sha256") != sha256(PATHS.train_csv)
+            or fine_summary.get("training_rows") != development["training_rows"]
+            or fine_summary.get("validation_rows") != development["validation_rows"]
+            or fine_summary.get("char_weights") != [0.7, 0.85, 1.0, 1.15, 1.3]
+            or fine_summary.get("c_values") != [0.3, 0.4, 0.5, 0.6, 0.8]
+            or fine_summary.get("expected_configurations") != 25
+            or fine_summary.get("complete") is not True):
+        raise RuntimeError("Hybrid grid does not belong to this complete seed-42 run")
     expected = {"MultinomialNB": 12, "LogisticRegression": 14, "SVC": 24, "MLP": 12}
     if formal.groupby("algorithm").size().to_dict() != expected:
         raise RuntimeError("The 62-configuration formal search is incomplete")
