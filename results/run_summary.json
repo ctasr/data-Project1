@@ -1,0 +1,31 @@
+{
+  "seed": 42,
+  "train_sha256": "484667d165458da7f73ba36d172d67e14864e1aa5ab1ee6262e2966dd295c863",
+  "test_sha256": "4882c04b008c055f351f1c9b25c45d601a454077af37e79375601f2465b41615",
+  "labelled_rows": 7368,
+  "training_rows": 5894,
+  "validation_rows": 1474,
+  "official_test_rows": 2457,
+  "train_test_exact_text_overlap": 0,
+  "selected_source": "hybrid_grid",
+  "best_algorithm": "LinearSVM",
+  "best_representation": "hybrid",
+  "best_parameters": {
+    "C": 0.5,
+    "char_weight": 0.85
+  },
+  "best_accuracy": 0.9497964721845319,
+  "best_macro_f1": 0.9500230471865999,
+  "prediction_class_counts": {
+    "0": 258,
+    "1": 244,
+    "2": 242,
+    "3": 240,
+    "4": 251,
+    "5": 250,
+    "6": 246,
+    "7": 245,
+    "8": 246,
+    "9": 235
+  }
+}

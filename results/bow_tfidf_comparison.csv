@@ -1,0 +1,3 @@
+representation,split_seed,C,feature_count,accuracy,macro_f1
+bag_of_words_counts,42,1.0,80000,0.9090909090909091,0.9095541033318117
+word_tfidf,42,1.0,80000,0.9416553595658074,0.941767539749484
