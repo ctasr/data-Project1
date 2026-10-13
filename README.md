@@ -13,6 +13,23 @@ python -m venv .venv
 .\.venv\Scripts\python.exe generate_figures.py
 ```
 
+仓库结构（课程数据文件需按上文说明自行放入）：
+
+```text
+.
+├─ main.py
+├─ tune_hybrid.py
+├─ run_formal_tuning.py
+├─ finalize_prediction.py
+├─ analyze_results.py
+├─ generate_figures.py
+├─ check_mlp_depth.py
+├─ requirements.txt
+├─ prediction.csv
+├─ results/
+└─ figures/
+```
+
 文件和目录的作用：
 
 | 文件或目录 | 作用 |
