@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import numpy as np
 import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
@@ -122,7 +123,47 @@ def check_feature_budget() -> None:
     pd.DataFrame(rows).to_csv(PATHS.results / "matched_budget_ablation.csv", index=False)
 
 
+def check_bow_vs_tfidf() -> None:
+    """Compare raw word counts with TF-IDF under the same split and SVM."""
+
+    labelled = load_labelled_data()
+    config = ExperimentConfig()
+    train_index, validation_index = train_test_split(
+        np.arange(len(labelled)), test_size=config.validation_size,
+        random_state=config.seed, stratify=labelled["target"],
+    )
+    training = labelled.iloc[train_index]
+    validation = labelled.iloc[validation_index]
+    word_counts = CountVectorizer(
+        lowercase=True, strip_accents="unicode", min_df=2, max_df=0.98,
+        ngram_range=(1, 2), max_features=80_000, dtype=np.float32,
+    )
+    rows = []
+    for name, extractor in (
+        ("bag_of_words_counts", word_counts),
+        ("word_tfidf", make_word_tfidf(80_000)),
+    ):
+        model = Pipeline([
+            ("features", extractor),
+            ("classifier", LinearSVC(C=1.0, dual="auto", random_state=config.seed)),
+        ])
+        model.fit(training["text"], training["target"])
+        prediction = model.predict(validation["text"])
+        rows.append({
+            "representation": name,
+            "split_seed": config.seed,
+            "C": 1.0,
+            "feature_count": len(model.named_steps["features"].get_feature_names_out()),
+            "accuracy": accuracy_score(validation["target"], prediction),
+            "macro_f1": f1_score(validation["target"], prediction, average="macro"),
+        })
+    result = pd.DataFrame(rows)
+    result.to_csv(PATHS.results / "bow_tfidf_comparison.csv", index=False)
+    print(result.to_string(index=False), flush=True)
+
+
 if __name__ == "__main__":
     inspect_mistakes()
     check_split_stability()
     check_feature_budget()
+    check_bow_vs_tfidf()

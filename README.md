@@ -19,6 +19,8 @@ python -m venv .venv
 
 最终输出是无表头、单列、每行一个0—9标签的`prediction.csv`。`analyze_results.py`在选模后记录误分类、固定配置的三次划分复核和匹配特征预算的消融；它们不改变最终选模决定。`results/`保存完整配置、指标、环境与数据哈希、损失记录和分类结果；`figures/`保存报告图。固定种子可复现本机运行条件下的划分与随机训练过程，但不同硬件或底层数值库仍可能产生微小浮点差异。不要使用`main.py --quick`的输出作为正式结果。
 
+`analyze_results.py`还在相同划分、词范围和LinearSVC参数下比较词袋计数与词级TF-IDF；该补充实验仅用于理解表示方法，不会改变既定的选模结果。
+
 可选的`python check_mlp_depth.py`只回答讲义中的网络层数扩展问题，不参与选模，也不会改写`prediction.csv`。其结果保存在`results/mlp_depth_comparison.csv`和`results/mlp_depth_history.csv`。
 
 ## 文件说明
