@@ -1,16 +1,17 @@
-"""Run the fixed, rubric-aligned tuning protocol for Data Project 1.
+"""Run all 62 predefined settings on the saved seed-42 validation split.
 
-The search space is fixed in FORMAL_TUNING_PROTOCOL.md.  Every parameter block
-is completed in full on the saved seed-42 split.  The official test set is not
-read.  Exact earlier measurements may be reused only when model, representation,
-parameters, split and seed are identical; their provenance is recorded.
+The default starts from an empty checkpoint. Use --resume after an interruption.
+Previously published results are never used as measurements for this run.
 """
 
 from __future__ import annotations
 
+import argparse
 import copy
+import hashlib
 import itertools
 import json
+import shutil
 import time
 import warnings
 from pathlib import Path
@@ -22,6 +23,7 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, log_loss
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import LinearSVC, SVC
@@ -29,8 +31,11 @@ from sklearn.svm import LinearSVC, SVC
 
 ROOT = Path(__file__).resolve().parent
 RESULTS = ROOT / "results"
-FORMAL_RESULTS = RESULTS / "formal_tuning_results.csv"
-FORMAL_HISTORY = RESULTS / "formal_mlp_history.csv"
+FORMAL_RESULTS = RESULTS / "formal_tuning_checkpoint.csv"
+FORMAL_HISTORY = RESULTS / "formal_mlp_checkpoint.csv"
+CHECKPOINT_META = RESULTS / "formal_tuning_checkpoint_meta.json"
+PUBLISHED_RESULTS = RESULTS / "formal_tuning_results.csv"
+PUBLISHED_HISTORY = RESULTS / "formal_mlp_history.csv"
 FORMAL_INNOVATION = RESULTS / "formal_innovation_results.csv"
 SEED = 42
 LABELS = np.arange(10)
@@ -73,33 +78,8 @@ def score_row(
     }
 
 
-def normalized_parameters(value: str) -> dict:
-    parameters = json.loads(value)
-    parameters.pop("search_stage", None)
-    parameters.pop("best_epoch", None)
-    return parameters
-
-
-def find_prior(
-    prior_rows: list[dict], algorithm: str, representation: str, parameters: dict
-) -> dict | None:
-    for row in prior_rows:
-        if row.get("algorithm") != algorithm:
-            continue
-        prior_representation = row.get("representation") or row.get("feature_space")
-        if prior_representation != representation:
-            continue
-        try:
-            if normalized_parameters(row["parameters"]) == parameters:
-                return row
-        except (KeyError, TypeError, json.JSONDecodeError):
-            continue
-    return None
-
-
 def add_or_fit(
     rows: list[dict],
-    prior_rows: list[dict],
     algorithm: str,
     representation: str,
     parameters: dict,
@@ -112,27 +92,6 @@ def add_or_fit(
     config_id = canonical_id(algorithm, representation, parameters)
     if any(row["config_id"] == config_id for row in rows):
         print(f"SKIP formal checkpoint {algorithm} {parameters}", flush=True)
-        return
-    prior = find_prior(prior_rows, algorithm, representation, parameters)
-    if prior is not None:
-        reused = {
-            "config_id": config_id,
-            "algorithm": algorithm,
-            "representation": representation,
-            "parameters": json.dumps(parameters, sort_keys=True),
-            "accuracy": float(prior["accuracy"]),
-            "macro_f1": float(prior["macro_f1"]),
-            "fit_seconds": float(prior["fit_seconds"]),
-            "converged": str(prior.get("converged", "True")).lower() != "false",
-            "provenance": "reused_exact_seed42_measurement",
-        }
-        rows.append(reused)
-        save_rows(rows)
-        print(
-            f"REUSE {algorithm:20s} {str(parameters):55s} "
-            f"accuracy={reused['accuracy']:.4f} macro-F1={reused['macro_f1']:.4f}",
-            flush=True,
-        )
         return
     started = time.perf_counter()
     with warnings.catch_warnings(record=True) as caught:
@@ -314,12 +273,26 @@ def save_innovation_evidence(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--resume", action="store_true", help="Continue this run's saved checkpoint")
+    arguments = parser.parse_args()
     np.random.seed(SEED)
     RESULTS.mkdir(exist_ok=True)
     labelled = pd.read_csv(ROOT / "train_data.csv")
+    digest = hashlib.sha256((ROOT / "train_data.csv").read_bytes()).hexdigest()
+    environment = json.loads((RESULTS / "environment.json").read_text(encoding="utf-8"))
+    if environment["train_sha256"] != digest:
+        raise RuntimeError("Training CSV changed after the development run")
     split = np.load(RESULTS / "split_indices.npz")
     train_indices = split["train_indices"]
     validation_indices = split["validation_indices"]
+    expected_train, expected_validation = train_test_split(
+        np.arange(len(labelled)), test_size=0.2, random_state=SEED,
+        stratify=labelled["target"],
+    )
+    if not (np.array_equal(train_indices, expected_train)
+            and np.array_equal(validation_indices, expected_validation)):
+        raise RuntimeError("Saved split is not the fixed seed-42 split")
     train_text = labelled.iloc[train_indices]["text"].astype(str)
     validation_text = labelled.iloc[validation_indices]["text"].astype(str)
     y_train = labelled.iloc[train_indices]["target"].to_numpy()
@@ -330,23 +303,21 @@ def main() -> None:
         flush=True,
     )
 
-    rows = (
-        pd.read_csv(FORMAL_RESULTS).to_dict(orient="records")
-        if FORMAL_RESULTS.exists()
-        else []
-    )
-    histories = (
-        pd.read_csv(FORMAL_HISTORY).to_dict(orient="records")
-        if FORMAL_HISTORY.exists()
-        else []
-    )
-    prior_rows = []
-    for path in (
-        RESULTS / "joint_tuning_results_full.csv",
-        RESULTS / "final_extension_experiments.csv",
-    ):
-        if path.exists():
-            prior_rows.extend(pd.read_csv(path).to_dict(orient="records"))
+    if arguments.resume and not FORMAL_RESULTS.exists():
+        raise RuntimeError("No fresh-run checkpoint exists to resume")
+    if arguments.resume:
+        checkpoint_meta = json.loads(CHECKPOINT_META.read_text(encoding="utf-8"))
+        if checkpoint_meta != {"seed": SEED, "train_sha256": digest}:
+            raise RuntimeError("Checkpoint belongs to different data or seed")
+    else:
+        CHECKPOINT_META.write_text(
+            json.dumps({"seed": SEED, "train_sha256": digest}, indent=2),
+            encoding="utf-8",
+        )
+    rows = (pd.read_csv(FORMAL_RESULTS).to_dict(orient="records")
+            if arguments.resume else [])
+    histories = (pd.read_csv(FORMAL_HISTORY).to_dict(orient="records")
+                 if arguments.resume and FORMAL_HISTORY.exists() else [])
 
     word_vectorizer = TfidfVectorizer(
         lowercase=True,
@@ -369,7 +340,6 @@ def main() -> None:
         parameters = {"alpha": alpha, "fit_prior": fit_prior}
         add_or_fit(
             rows,
-            prior_rows,
             "MultinomialNB",
             representation,
             parameters,
@@ -392,7 +362,6 @@ def main() -> None:
         }
         add_or_fit(
             rows,
-            prior_rows,
             "LogisticRegression",
             representation,
             parameters,
@@ -415,7 +384,6 @@ def main() -> None:
         }
         add_or_fit(
             rows,
-            prior_rows,
             "LogisticRegression",
             representation,
             parameters,
@@ -440,7 +408,6 @@ def main() -> None:
         }
         add_or_fit(
             rows,
-            prior_rows,
             "SVC",
             representation,
             parameters,
@@ -461,7 +428,6 @@ def main() -> None:
         }
         add_or_fit(
             rows,
-            prior_rows,
             "SVC",
             representation,
             parameters,
@@ -539,6 +505,7 @@ def main() -> None:
     ).iloc[0]
     summary = {
         "seed": SEED,
+        "train_sha256": digest,
         "train_size": len(y_train),
         "validation_size": len(y_validation),
         "official_test_used_for_tuning": False,
@@ -551,6 +518,8 @@ def main() -> None:
         "best_accuracy": float(best["accuracy"]),
         "best_macro_f1": float(best["macro_f1"]),
     }
+    shutil.copyfile(FORMAL_RESULTS, PUBLISHED_RESULTS)
+    shutil.copyfile(FORMAL_HISTORY, PUBLISHED_HISTORY)
     (RESULTS / "formal_tuning_summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
     )

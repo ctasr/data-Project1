@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import matplotlib
@@ -10,6 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix
 
 
 ROOT = Path(__file__).resolve().parent
@@ -93,13 +95,54 @@ def ablation_comparison(innovation: pd.DataFrame) -> None:
     plt.close(figure)
 
 
+def final_confusion_matrix(validation: pd.DataFrame) -> None:
+    """Plot the selected model, not the earlier main-experiment winner."""
+
+    required = {"true_label", "predicted_label"}
+    if not required.issubset(validation.columns):
+        raise ValueError("Final validation predictions are missing label columns")
+    summary = json.loads((RESULTS / "run_summary.json").read_text(encoding="utf-8"))
+    measured_accuracy = (validation["true_label"] == validation["predicted_label"]).mean()
+    if (len(validation) != summary["validation_rows"]
+            or abs(measured_accuracy - summary["best_accuracy"]) > 1e-12):
+        raise RuntimeError("Final predictions disagree with the selection summary")
+    labels = np.arange(10)
+    if not set(validation["true_label"]).union(validation["predicted_label"]).issubset(set(labels)):
+        raise ValueError("Final validation predictions contain an invalid label")
+    matrix = confusion_matrix(
+        validation["true_label"], validation["predicted_label"], labels=labels
+    )
+    normalized = matrix / matrix.sum(axis=1, keepdims=True)
+    figure, axis = plt.subplots(figsize=(8, 7))
+    image = axis.imshow(normalized, cmap="Blues", vmin=0, vmax=1)
+    figure.colorbar(image, ax=axis)
+    axis.set_xticks(labels)
+    axis.set_yticks(labels)
+    for row in range(10):
+        for column in range(10):
+            value = normalized[row, column]
+            axis.text(
+                column, row, f"{value:.2f}", ha="center", va="center",
+                fontsize=7, color="white" if value > 0.5 else "black",
+            )
+    axis.set(
+        xlabel="Predicted label", ylabel="True label",
+        title="Selected model validation confusion matrix (row-normalized)",
+    )
+    figure.tight_layout()
+    figure.savefig(FIGURES / "confusion_matrix.png", dpi=220)
+    plt.close(figure)
+
+
 def main() -> None:
     FIGURES.mkdir(exist_ok=True)
     formal = pd.read_csv(RESULTS / "formal_tuning_results.csv")
     main_results = pd.read_csv(RESULTS / "experiment_results.csv")
     innovation = pd.read_csv(RESULTS / "formal_innovation_results.csv")
+    validation = pd.read_csv(RESULTS / "validation_predictions.csv")
     model_comparison(formal, main_results)
     ablation_comparison(innovation)
+    final_confusion_matrix(validation)
     print("report figures generated")
 
 
